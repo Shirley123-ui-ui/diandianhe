@@ -2,144 +2,570 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>三维电场线可视化模拟器（专业版）</title>
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-            background-color: #ffffff;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
-        #container {
-            position: relative;
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+            background-color: #f5f5f7;
+            overflow: hidden;
             width: 100vw;
             height: 100vh;
+            touch-action: none;
         }
-        #controls {
+        
+        #container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            height: 100%;
             position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 100;
-            background: rgba(255, 255, 255, 0.9);
-            color: #000;
-            padding: 15px;
-            border-radius: 8px;
-            max-width: 300px;
-            border: 1px solid #ccc;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            top: 0;
+            left: 0;
+            z-index: 1;
         }
+        
+        /* 移动端控制面板 */
+        #mobile-controls-toggle {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 101;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 50%;
+            border: 2px solid #007aff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+        
+        #mobile-controls-toggle:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: scale(1.05);
+        }
+        
+        #mobile-controls-toggle span {
+            font-size: 24px;
+            color: #007aff;
+            font-weight: bold;
+        }
+        
+        #controls-overlay {
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 90%;
+            max-width: 400px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.98);
+            z-index: 102;
+            transition: left 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+            padding: 20px 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #controls-overlay.active {
+            left: 0;
+        }
+        
+        .overlay-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #007aff;
+        }
+        
+        .overlay-header h2 {
+            color: #1d1d1f;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+        
+        .close-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #f5f5f7;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            color: #1d1d1f;
+            transition: all 0.2s ease;
+        }
+        
+        .close-btn:hover {
+            background: #e5e5e7;
+        }
+        
+        /* 控制面板通用样式 */
+        .control-panel {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        
         .control-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
         }
+        
         .control-group label {
             display: block;
-            margin-bottom: 5px;
-            font-size: 12px;
-            color: #333;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #2c3e50;
         }
-        .control-group input, .control-group select {
+        
+        .control-group select {
             width: 100%;
-            padding: 5px;
-            background: #f0f0f0;
-            color: #000;
-            border: 1px solid #999;
-            border-radius: 3px;
+            padding: 12px 15px;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            color: #1d1d1f;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d1d1f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 15px center;
+            background-size: 16px;
+            transition: border-color 0.2s ease;
         }
-        #info {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            z-index: 100;
-            background: rgba(255, 255, 255, 0.9);
-            color: #000;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 12px;
-            border: 1px solid #ccc;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        
+        .control-group select:focus {
+            outline: none;
+            border-color: #007aff;
         }
+        
+        .slider-container {
+            position: relative;
+            margin-top: 8px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 40px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+        }
+        
+        input[type="range"]:focus {
+            outline: none;
+        }
+        
+        /* 自定义滑块样式 */
+        input[type="range"]::-webkit-slider-track {
+            width: 100%;
+            height: 8px;
+            background: linear-gradient(to right, #e0e0e0, #e0e0e0);
+            border-radius: 4px;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #007aff;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 4px 8px rgba(0, 122, 255, 0.3);
+            transition: all 0.2s ease;
+            border: 3px solid white;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 12px rgba(0, 122, 255, 0.4);
+        }
+        
+        .value-display {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-size: 0.85rem;
+            color: #666;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .slider-label span {
+            font-weight: 500;
+            color: #007aff;
+            background: rgba(0, 122, 255, 0.1);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+        }
+        
+        /* 图例样式 */
         #legend {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 15px;
+            right: 15px;
             z-index: 100;
-            background: rgba(255, 255, 255, 0.9);
-            color: #000;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 12px;
-            border: 1px solid #ccc;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.95);
+            color: #1d1d1f;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            max-width: 180px;
+            backdrop-filter: blur(10px);
         }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+        
+        .legend-color.positive {
+            background: #ff3b30;
+            box-shadow: 0 2px 4px rgba(255, 59, 48, 0.3);
+        }
+        
+        .legend-color.negative {
+            background: #007aff;
+            box-shadow: 0 2px 4px rgba(0, 122, 255, 0.3);
+        }
+        
+        .legend-color.field {
+            background: #000;
+            border-radius: 2px;
+        }
+        
+        /* 信息提示样式 */
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            max-width: 90%;
+            line-height: 1.4;
+        }
+        
+        /* 电荷标签样式 */
         .charge-label {
             position: absolute;
             color: white;
             font-weight: bold;
-            background: rgba(0,0,0,0.5);
-            padding: 2px 5px;
-            border-radius: 3px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 4px 10px;
+            border-radius: 6px;
             pointer-events: none;
             z-index: 1000;
+            font-size: 0.9rem;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        /* 移动端手势提示 */
+        #gesture-hint {
+            position: absolute;
+            top: 80px;
+            left: 15px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            display: none;
+        }
+        
+        /* 平板优化 */
+        @media (min-width: 768px) {
+            #controls-overlay {
+                width: 70%;
+            }
+            
+            #info {
+                font-size: 0.9rem;
+                padding: 15px 25px;
+            }
+            
+            #legend {
+                max-width: 220px;
+                font-size: 0.9rem;
+                padding: 20px;
+            }
+        }
+        
+        /* 桌面优化 */
+        @media (min-width: 1024px) {
+            body {
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            }
+            
+            #controls-overlay {
+                width: 400px;
+            }
+            
+            #mobile-controls-toggle {
+                display: none;
+            }
+            
+            #gesture-hint {
+                display: block;
+            }
+        }
+        
+        /* 暗色模式支持 */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #000;
+                color: #fff;
+            }
+            
+            #controls-overlay {
+                background: rgba(28, 28, 30, 0.98);
+                color: #fff;
+            }
+            
+            .overlay-header h2 {
+                color: #fff;
+            }
+            
+            .control-group {
+                background: rgba(44, 44, 46, 0.8);
+                border-color: rgba(84, 84, 88, 0.65);
+            }
+            
+            .control-group label {
+                color: #e5e5ea;
+            }
+            
+            .control-group select {
+                background: rgba(44, 44, 46, 0.8);
+                border-color: rgba(84, 84, 88, 0.65);
+                color: #fff;
+                background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            }
+            
+            input[type="range"]::-webkit-slider-track {
+                background: rgba(84, 84, 88, 0.65);
+            }
+            
+            input[type="range"]::-webkit-slider-thumb {
+                background: #0a84ff;
+                border-color: #1c1c1e;
+            }
+            
+            #legend, #info {
+                background: rgba(28, 28, 30, 0.8);
+                color: #fff;
+            }
+            
+            .close-btn {
+                background: rgba(44, 44, 46, 0.8);
+                color: #fff;
+            }
+        }
+        
+        /* 防止iOS缩放 */
+        input, select, textarea {
+            font-size: 16px;
+        }
+        
+        /* 触摸优化 */
+        button, select, input[type="range"] {
+            touch-action: manipulation;
         }
     </style>
 </head>
 <body>
     <div id="container">
-        <div id="controls">
-            <div class="control-group">
-                <label>电荷配置:</label>
-                <select id="chargeConfig">
-                    <option value="positive">两正电荷</option>
-                    <option value="mixed">一正一负</option>
-                    <option value="negative">两负电荷</option>
-                </select>
+        <!-- 3D画布容器 -->
+        <div id="canvas-container"></div>
+        
+        <!-- 移动端控制面板开关 -->
+        <div id="mobile-controls-toggle" title="显示控制面板">
+            <span>⚙️</span>
+        </div>
+        
+        <!-- 控制面板覆盖层 -->
+        <div id="controls-overlay">
+            <div class="overlay-header">
+                <h2>电场线控制面板</h2>
+                <button class="close-btn" id="close-controls">×</button>
             </div>
-            <div class="control-group">
-                <label>电荷A电量: <span id="chargeAValue">1.0</span></label>
-                <input type="range" id="chargeA" min="-5" max="5" step="0.1" value="1.0">
-            </div>
-            <div class="control-group">
-                <label>电荷B电量: <span id="chargeBValue">1.0</span></label>
-                <input type="range" id="chargeB" min="-5" max="5" step="0.1" value="1.0">
-            </div>
-            <div class="control-group">
-                <label>电荷A X位置: <span id="posAXValue">-2.0</span></label>
-                <input type="range" id="posAX" min="-5" max="5" step="0.1" value="-2.0">
-            </div>
-            <div class="control-group">
-                <label>电荷A Y位置: <span id="posAYValue">0.0</span></label>
-                <input type="range" id="posAY" min="-5" max="5" step="0.1" value="0.0">
-            </div>
-            <div class="control-group">
-                <label>电荷A Z位置: <span id="posAZValue">0.0</span></label>
-                <input type="range" id="posAZ" min="-5" max="5" step="0.1" value="0.0">
-            </div>
-            <div class="control-group">
-                <label>电荷B X位置: <span id="posBXValue">2.0</span></label>
-                <input type="range" id="posBX" min="-5" max="5" step="0.1" value="2.0">
-            </div>
-            <div class="control-group">
-                <label>电荷B Y位置: <span id="posBYValue">0.0</span></label>
-                <input type="range" id="posBY" min="-5" max="5" step="0.1" value="0.0">
-            </div>
-            <div class="control-group">
-                <label>电荷B Z位置: <span id="posBZValue">0.0</span></label>
-                <input type="range" id="posBZ" min="-5" max="5" step="0.1" value="0.0">
+            
+            <div class="control-panel">
+                <div class="control-group">
+                    <label for="chargeConfig">电荷配置:</label>
+                    <select id="chargeConfig">
+                        <option value="positive">两正电荷</option>
+                        <option value="mixed">一正一负</option>
+                        <option value="negative">两负电荷</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <div class="slider-label">
+                        <label for="chargeA">电荷A电量:</label>
+                        <span id="chargeAValue">1.0</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="chargeA" min="-5" max="5" step="0.1" value="1.0">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <div class="slider-label">
+                        <label for="chargeB">电荷B电量:</label>
+                        <span id="chargeBValue">1.0</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="chargeB" min="-5" max="5" step="0.1" value="1.0">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3 style="margin-bottom: 15px; color: #007aff;">电荷A位置</h3>
+                    <div class="slider-label">
+                        <label for="posAX">X位置:</label>
+                        <span id="posAXValue">-2.0</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="posAX" min="-5" max="5" step="0.1" value="-2.0">
+                    </div>
+                    
+                    <div class="slider-label">
+                        <label for="posAY">Y位置:</label>
+                        <span id="posAYValue">0.0</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="posAY" min="-5" max="5" step="0.1" value="0.0">
+                    </div>
+                    
+                    <div class="slider-label">
+                        <label for="posAZ">Z位置:</label>
+                        <span id="posAZValue">0.0</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="posAZ" min="-5" max="5" step="0.1" value="0.0">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3 style="margin-bottom: 15px; color: #007aff;">电荷B位置</h3>
+                    <div class="slider-label">
+                        <label for="posBX">X位置:</label>
+                        <span id="posBXValue">2.0</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="posBX" min="-5" max="5" step="0.1" value="2.0">
+                    </div>
+                    
+                    <div class="slider-label">
+                        <label for="posBY">Y位置:</label>
+                        <span id="posBYValue">0.0</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="posBY" min="-5" max="5" step="0.1" value="0.0">
+                    </div>
+                    
+                    <div class="slider-label">
+                        <label for="posBZ">Z位置:</label>
+                        <span id="posBZValue">0.0</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" id="posBZ" min="-5" max="5" step="0.1" value="0.0">
+                    </div>
+                </div>
             </div>
         </div>
+        
+        <!-- 图例 -->
         <div id="legend">
-            <div style="color: #ff0000;">● 正电荷 (红色)</div>
-            <div style="color: #0000ff;">● 负电荷 (蓝色)</div>
-            <div style="color: #000;">→ 电场线方向</div>
+            <div class="legend-item">
+                <div class="legend-color positive"></div>
+                <span>正电荷 (红色)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color negative"></div>
+                <span>负电荷 (蓝色)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color field"></div>
+                <span>电场线方向</span>
+            </div>
         </div>
+        
+        <!-- 信息提示 -->
         <div id="info">
-            拖拽鼠标旋转视角 | 滚轮缩放 | 双击重置视角
+            触摸拖拽旋转视角 | 双指缩放 | 双击重置视角
+        </div>
+        
+        <!-- 移动端手势提示 -->
+        <div id="gesture-hint">
+            手势操作提示：单指拖拽旋转，双指缩放/旋转，双击重置
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
+        // 移动端检测
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isTablet = /iPad|Android|Tablet/i.test(navigator.userAgent);
+        
         // 场景设置
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xffffff); // 白色背景
@@ -147,26 +573,40 @@
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 5, 10);
         
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            alpha: true,
+            powerPreference: "high-performance"
+        });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        document.getElementById('container').appendChild(renderer.domElement);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 限制像素比以提高性能
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        // 光照
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+        // 光照设置
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
         
-        const directionalLight1 = new THREE.DirectionalLight(0x000000, 0.8);
-        directionalLight1.position.set(1, 1, 1);
+        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight1.position.set(5, 5, 5);
+        directionalLight1.castShadow = true;
+        directionalLight1.shadow.mapSize.width = 2048;
+        directionalLight1.shadow.mapSize.height = 2048;
         scene.add(directionalLight1);
         
-        const directionalLight2 = new THREE.DirectionalLight(0x000000, 0.5);
-        directionalLight2.position.set(-1, -1, -1);
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+        directionalLight2.position.set(-5, 5, -5);
         scene.add(directionalLight2);
 
         // 坐标轴
         const axesHelper = new THREE.AxesHelper(5);
         scene.add(axesHelper);
+
+        // 创建简单的网格地面
+        const gridHelper = new THREE.GridHelper(20, 20, 0xcccccc, 0xcccccc);
+        gridHelper.position.y = -0.5;
+        scene.add(gridHelper);
 
         // 电荷对象
         let chargeA = {
@@ -186,48 +626,27 @@
         // 创建电荷球体
         function createCharge(position, charge, name) {
             const geometry = new THREE.SphereGeometry(0.3, 32, 32);
-            const color = charge > 0 ? 0xff0000 : 0x0000ff; // 红色正电荷，蓝色负电荷
+            const color = charge > 0 ? 0xff3b30 : 0x007aff; // 使用更现代的颜色
             const material = new THREE.MeshPhongMaterial({ 
                 color: color,
                 emissive: new THREE.Color(color).multiplyScalar(0.2),
-                shininess: 50
+                shininess: 100,
+                specular: 0x222222
             });
             const sphere = new THREE.Mesh(geometry, material);
             sphere.position.copy(position);
+            sphere.castShadow = true;
+            sphere.receiveShadow = false;
             
-            // 创建标签
-            const canvas = document.createElement('canvas');
-            const context = canvas.getContext('2d');
-            canvas.width = 64;
-            canvas.height = 32;
-            context.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            context.fillRect(0, 0, canvas.width, canvas.height);
-            context.font = '20px Arial';
-            context.fillStyle = 'white';
-            context.textAlign = 'center';
-            context.fillText(name, canvas.width/2, canvas.height/2 + 6);
-            
-            const texture = new THREE.CanvasTexture(canvas);
-            const labelMaterial = new THREE.SpriteMaterial({ map: texture });
-            const label = new THREE.Sprite(labelMaterial);
-            label.scale.set(1, 0.5, 1);
-            label.position.copy(position).add(new THREE.Vector3(0, 0.5, 0));
-            
-            return { mesh: sphere, label: label };
+            return sphere;
         }
 
         // 初始化电荷
-        const chargeAObj = createCharge(chargeA.position, chargeA.charge, 'A');
-        const chargeBObj = createCharge(chargeB.position, chargeB.charge, 'B');
-        chargeA.mesh = chargeAObj.mesh;
-        chargeA.label = chargeAObj.label;
-        chargeB.mesh = chargeBObj.mesh;
-        chargeB.label = chargeBObj.label;
+        chargeA.mesh = createCharge(chargeA.position, chargeA.charge, 'A');
+        chargeB.mesh = createCharge(chargeB.position, chargeB.charge, 'B');
         
         scene.add(chargeA.mesh);
-        scene.add(chargeA.label);
         scene.add(chargeB.mesh);
-        scene.add(chargeB.label);
 
         // 电场线
         let fieldLines = [];
@@ -268,7 +687,7 @@
             return arrowHelper;
         }
 
-        // 绘制电场线（专业版）
+        // 绘制电场线（优化版）
         function drawFieldLines() {
             // 清除旧的电场线和箭头
             for (const line of fieldLines) {
@@ -282,19 +701,27 @@
 
             const charges = [chargeA, chargeB];
             
+            // 根据设备性能调整电场线密度
+            let lineDensity = 50;
+            if (isMobile) {
+                lineDensity = 30; // 移动端减少密度
+                if (isTablet) {
+                    lineDensity = 40; // 平板稍多一些
+                }
+            }
+            
             // 对于每个电荷，根据其电荷性质绘制电场线
             for (const sourceCharge of charges) {
                 // 根据电荷量确定电场线密度（正比于电荷量的绝对值）
-                const density = Math.max(10, Math.min(100, Math.abs(sourceCharge.charge) * 20));
+                const density = Math.max(10, Math.min(lineDensity, Math.abs(sourceCharge.charge) * 15));
                 
                 // 正电荷向外发散，负电荷向内汇聚
                 const isPositive = sourceCharge.charge > 0;
                 
-                // 计算最大距离（一正一负时增加距离）
+                // 计算最大距离
                 let maxDistance = 3.0;
                 if ((chargeA.charge > 0 && chargeB.charge < 0) || (chargeA.charge < 0 && chargeB.charge > 0)) {
-                    // 一正一负情况，正电荷的电场线应该延伸到负电荷
-                    maxDistance = 8.0;
+                    maxDistance = 6.0; // 一正一负情况减少最大距离以提高性能
                 }
                 
                 for (let i = 0; i < density; i++) {
@@ -313,23 +740,16 @@
                     const points = [start.clone()];
                     let current = start.clone();
                     let steps = 0;
-                    const maxSteps = 200;
+                    const maxSteps = 150; // 减少最大步数以提高性能
                     const stepSize = 0.05;
                     
                     while (steps < maxSteps) {
                         const field = calculateElectricField(current, charges);
-                        if (field.length() < 0.0001) break; // 场强太小则停止
+                        if (field.length() < 0.0001) break;
                         
-                        // 标准化场强向量
                         field.normalize();
                         
-                        // 根据电荷类型决定积分方向
-                        // 正电荷：沿着电场方向向外
-                        // 负电荷：逆着电场方向向内
-                        if (isPositive) {
-                            // 正电荷：沿着电场方向
-                        } else {
-                            // 负电荷：逆着电场方向
+                        if (!isPositive) {
                             field.multiplyScalar(-1);
                         }
                         
@@ -342,25 +762,17 @@
                         const distToA = current.distanceTo(chargeA.position);
                         const distToB = current.distanceTo(chargeB.position);
                         
-                        // 如果是负电荷且接近任一电荷，则停止（电场线汇聚到电荷）
                         if (!isPositive && (distToA < 0.35 || distToB < 0.35)) {
                             break;
                         }
                         
                         // 特殊处理一正一负情况
                         if (isPositive && (chargeA.charge > 0 && chargeB.charge < 0) || (chargeA.charge < 0 && chargeB.charge > 0)) {
-                            // 如果是正电荷，且遇到负电荷，则停止（电场线连接到负电荷）
                             if (distToA < 0.35 && chargeA.charge < 0) break;
                             if (distToB < 0.35 && chargeB.charge < 0) break;
                         }
                         
-                        // 如果是正电荷且远离到一定距离，则停止
                         if (isPositive && Math.min(distToA, distToB) > maxDistance) {
-                            break;
-                        }
-                        
-                        // 如果两点距离太近，也停止（可能在鞍点附近）
-                        if (steps > 0 && current.distanceTo(points[points.length - 2]) < 0.001) {
                             break;
                         }
                         
@@ -374,22 +786,21 @@
                         const material = new THREE.LineBasicMaterial({ 
                             color: lineColor,
                             transparent: true,
-                            opacity: 0.7
+                            opacity: 0.7,
+                            linewidth: 1
                         });
                         const line = new THREE.Line(geometry, material);
                         scene.add(line);
                         fieldLines.push(line);
                         
-                        // 添加方向箭头（每隔几个点添加一个）
-                        for (let j = 10; j < points.length; j += 15) {
+                        // 减少箭头数量以提高性能
+                        const arrowSpacing = isMobile ? 20 : 15;
+                        for (let j = 10; j < points.length; j += arrowSpacing) {
                             if (j < points.length - 1) {
-                                // 确定箭头方向
                                 let arrowDir;
                                 if (isPositive) {
-                                    // 正电荷：箭头向外
                                     arrowDir = new THREE.Vector3().subVectors(points[j+1], points[j]).normalize();
                                 } else {
-                                    // 负电荷：箭头向内
                                     arrowDir = new THREE.Vector3().subVectors(points[j], points[j+1]).normalize();
                                 }
                                 
@@ -412,12 +823,12 @@
 
         // 相机控制变量
         let isDragging = false;
-        let previousMousePosition = {
-            x: 0,
-            y: 0
-        };
+        let previousMousePosition = { x: 0, y: 0 };
+        let previousTouchDistance = null;
         let target = new THREE.Vector3(0, 0, 0);
+        let isControlPanelOpen = false;
 
+        // 鼠标事件
         function onMouseDown(event) {
             isDragging = true;
             previousMousePosition = {
@@ -431,7 +842,7 @@
         }
 
         function onMouseMove(event) {
-            if (!isDragging) return;
+            if (!isDragging || isControlPanelOpen) return;
             
             const deltaMove = {
                 x: event.clientX - previousMousePosition.x,
@@ -442,23 +853,15 @@
             const spherical = new THREE.Spherical();
             const offset = new THREE.Vector3();
             
-            // 计算相机相对于目标点的偏移
             offset.copy(camera.position).sub(target);
-            
-            // 将偏移转换为球坐标
             spherical.setFromVector3(offset);
             
-            // 应用旋转
-            spherical.theta -= deltaMove.x * 0.01; // 左右旋转
-            spherical.phi += deltaMove.y * 0.01;   // 上下旋转
+            spherical.theta -= deltaMove.x * 0.01;
+            spherical.phi += deltaMove.y * 0.01;
             
-            // 限制上下视角
             spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
             
-            // 转换回笛卡尔坐标
             offset.setFromSpherical(spherical);
-            
-            // 更新相机位置
             camera.position.copy(target).add(offset);
             camera.lookAt(target);
             
@@ -473,13 +876,11 @@
             const zoomSpeed = 0.1;
             const direction = event.deltaY > 0 ? 1 : -1;
             
-            // 沿着相机到目标点的方向缩放
             const directionVector = new THREE.Vector3().subVectors(camera.position, target).normalize();
             const zoomAmount = directionVector.multiplyScalar(direction * zoomSpeed);
             
             camera.position.add(zoomAmount);
             
-            // 限制相机距离
             const distance = camera.position.distanceTo(target);
             if (distance < 3) {
                 const normalized = new THREE.Vector3().subVectors(camera.position, target).normalize();
@@ -497,12 +898,95 @@
             target.set(0, 0, 0);
         }
 
-        // 事件监听
-        renderer.domElement.addEventListener('mousedown', onMouseDown, false);
-        window.addEventListener('mouseup', onMouseUp, false);
-        renderer.domElement.addEventListener('mousemove', onMouseMove, false);
-        renderer.domElement.addEventListener('wheel', onMouseWheel, false);
-        renderer.domElement.addEventListener('dblclick', onDoubleClick, false);
+        // 触摸事件
+        function onTouchStart(event) {
+            event.preventDefault();
+            
+            if (event.touches.length === 1) {
+                // 单指触摸 - 旋转
+                isDragging = true;
+                previousMousePosition = {
+                    x: event.touches[0].clientX,
+                    y: event.touches[0].clientY
+                };
+            } else if (event.touches.length === 2) {
+                // 双指触摸 - 缩放
+                const touch1 = event.touches[0];
+                const touch2 = event.touches[1];
+                previousTouchDistance = Math.sqrt(
+                    Math.pow(touch2.clientX - touch1.clientX, 2) + 
+                    Math.pow(touch2.clientY - touch1.clientY, 2)
+                );
+            }
+        }
+
+        function onTouchMove(event) {
+            event.preventDefault();
+            
+            if (event.touches.length === 1 && isDragging) {
+                // 单指移动 - 旋转
+                const deltaMove = {
+                    x: event.touches[0].clientX - previousMousePosition.x,
+                    y: event.touches[0].clientY - previousMousePosition.y
+                };
+
+                const spherical = new THREE.Spherical();
+                const offset = new THREE.Vector3();
+                
+                offset.copy(camera.position).sub(target);
+                spherical.setFromVector3(offset);
+                
+                spherical.theta -= deltaMove.x * 0.01;
+                spherical.phi += deltaMove.y * 0.01;
+                
+                spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+                
+                offset.setFromSpherical(spherical);
+                camera.position.copy(target).add(offset);
+                camera.lookAt(target);
+                
+                previousMousePosition = {
+                    x: event.touches[0].clientX,
+                    y: event.touches[0].clientY
+                };
+            } else if (event.touches.length === 2) {
+                // 双指移动 - 缩放
+                const touch1 = event.touches[0];
+                const touch2 = event.touches[1];
+                const currentDistance = Math.sqrt(
+                    Math.pow(touch2.clientX - touch1.clientX, 2) + 
+                    Math.pow(touch2.clientY - touch1.clientY, 2)
+                );
+                
+                if (previousTouchDistance !== null) {
+                    const deltaDistance = currentDistance - previousTouchDistance;
+                    const zoomSpeed = 0.01;
+                    const zoomAmount = deltaDistance * zoomSpeed;
+                    
+                    const directionVector = new THREE.Vector3().subVectors(camera.position, target).normalize();
+                    const zoomVector = directionVector.multiplyScalar(-zoomAmount);
+                    
+                    camera.position.add(zoomVector);
+                    
+                    const distance = camera.position.distanceTo(target);
+                    if (distance < 3) {
+                        const normalized = new THREE.Vector3().subVectors(camera.position, target).normalize();
+                        camera.position.copy(target).add(normalized.multiplyScalar(3));
+                    }
+                    if (distance > 30) {
+                        const normalized = new THREE.Vector3().subVectors(camera.position, target).normalize();
+                        camera.position.copy(target).add(normalized.multiplyScalar(30));
+                    }
+                }
+                
+                previousTouchDistance = currentDistance;
+            }
+        }
+
+        function onTouchEnd(event) {
+            isDragging = false;
+            previousTouchDistance = null;
+        }
 
         // UI控制事件
         document.getElementById('chargeConfig').addEventListener('change', function() {
@@ -548,17 +1032,15 @@
 
         function updateCharges() {
             // 更新电荷球体颜色
-            const colorA = chargeA.charge > 0 ? 0xff0000 : 0x0000ff;
-            const colorB = chargeB.charge > 0 ? 0xff0000 : 0x0000ff;
+            const colorA = chargeA.charge > 0 ? 0xff3b30 : 0x007aff;
+            const colorB = chargeB.charge > 0 ? 0xff3b30 : 0x007aff;
             
             chargeA.mesh.material.color = new THREE.Color(colorA);
             chargeB.mesh.material.color = new THREE.Color(colorB);
             
             // 更新位置
             chargeA.mesh.position.copy(chargeA.position);
-            chargeA.label.position.copy(chargeA.position).add(new THREE.Vector3(0, 0.5, 0));
             chargeB.mesh.position.copy(chargeB.position);
-            chargeB.label.position.copy(chargeB.position).add(new THREE.Vector3(0, 0.5, 0));
             
             // 重新绘制电场线
             drawFieldLines();
@@ -578,54 +1060,78 @@
         });
 
         // 监听位置变化
-        document.getElementById('posAX').addEventListener('input', function() {
-            chargeA.position.x = parseFloat(this.value);
-            document.getElementById('posAXValue').textContent = chargeA.position.x.toFixed(1);
-            updateCharges();
+        const positionInputs = ['posAX', 'posAY', 'posAZ', 'posBX', 'posBY', 'posBZ'];
+        positionInputs.forEach(inputId => {
+            document.getElementById(inputId).addEventListener('input', function() {
+                const axis = inputId.charAt(3); // 'X', 'Y', or 'Z'
+                const charge = inputId.charAt(2) === 'A' ? chargeA : chargeB; // 'A' or 'B'
+                
+                charge.position[axis.toLowerCase()] = parseFloat(this.value);
+                document.getElementById(inputId + 'Value').textContent = this.value;
+                updateCharges();
+            });
         });
 
-        document.getElementById('posAY').addEventListener('input', function() {
-            chargeA.position.y = parseFloat(this.value);
-            document.getElementById('posAYValue').textContent = chargeA.position.y.toFixed(1);
-            updateCharges();
+        // 移动端控制面板切换
+        const mobileControlsToggle = document.getElementById('mobile-controls-toggle');
+        const controlsOverlay = document.getElementById('controls-overlay');
+        const closeControlsBtn = document.getElementById('close-controls');
+
+        mobileControlsToggle.addEventListener('click', function() {
+            controlsOverlay.classList.add('active');
+            isControlPanelOpen = true;
         });
 
-        document.getElementById('posAZ').addEventListener('input', function() {
-            chargeA.position.z = parseFloat(this.value);
-            document.getElementById('posAZValue').textContent = chargeA.position.z.toFixed(1);
-            updateCharges();
+        closeControlsBtn.addEventListener('click', function() {
+            controlsOverlay.classList.remove('active');
+            isControlPanelOpen = false;
         });
 
-        document.getElementById('posBX').addEventListener('input', function() {
-            chargeB.position.x = parseFloat(this.value);
-            document.getElementById('posBXValue').textContent = chargeB.position.x.toFixed(1);
-            updateCharges();
-        });
-
-        document.getElementById('posBY').addEventListener('input', function() {
-            chargeB.position.y = parseFloat(this.value);
-            document.getElementById('posBYValue').textContent = chargeB.position.y.toFixed(1);
-            updateCharges();
-        });
-
-        document.getElementById('posBZ').addEventListener('input', function() {
-            chargeB.position.z = parseFloat(this.value);
-            document.getElementById('posBZValue').textContent = chargeB.position.z.toFixed(1);
-            updateCharges();
+        // 点击覆盖层外部关闭面板
+        controlsOverlay.addEventListener('click', function(event) {
+            if (event.target === controlsOverlay) {
+                controlsOverlay.classList.remove('active');
+                isControlPanelOpen = false;
+            }
         });
 
         // 初始绘制
         drawFieldLines();
         updateUI();
 
+        // 事件监听
+        if (isMobile) {
+            // 移动端使用触摸事件
+            renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+            renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+            renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
+            renderer.domElement.addEventListener('touchcancel', onTouchEnd, { passive: false });
+            
+            // 移动端双击事件
+            let lastTouchTime = 0;
+            renderer.domElement.addEventListener('touchend', function(event) {
+                const currentTime = new Date().getTime();
+                const timeDiff = currentTime - lastTouchTime;
+                
+                if (timeDiff < 300 && timeDiff > 0) {
+                    // 双击重置视角
+                    onDoubleClick();
+                }
+                
+                lastTouchTime = currentTime;
+            });
+        } else {
+            // 桌面端使用鼠标事件
+            renderer.domElement.addEventListener('mousedown', onMouseDown, false);
+            window.addEventListener('mouseup', onMouseUp, false);
+            renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+            renderer.domElement.addEventListener('wheel', onMouseWheel, false);
+            renderer.domElement.addEventListener('dblclick', onDoubleClick, false);
+        }
+
         // 动画循环
         function animate() {
             requestAnimationFrame(animate);
-            
-            // 更新标签位置（跟随电荷移动）
-            chargeA.label.position.copy(chargeA.position).add(new THREE.Vector3(0, 0.5, 0));
-            chargeB.label.position.copy(chargeB.position).add(new THREE.Vector3(0, 0.5, 0));
-            
             renderer.render(scene, camera);
         }
         animate();
@@ -636,9 +1142,37 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        // 性能优化：当页面不可见时暂停动画
+        let hidden, visibilityChange;
+        if (typeof document.hidden !== "undefined") {
+            hidden = "hidden";
+            visibilityChange = "visibilitychange";
+        } else if (typeof document.msHidden !== "undefined") {
+            hidden = "msHidden";
+            visibilityChange = "msvisibilitychange";
+        } else if (typeof document.webkitHidden !== "undefined") {
+            hidden = "webkitHidden";
+            visibilityChange = "webkitvisibilitychange";
+        }
+
+        let animationId = null;
+        function handleVisibilityChange() {
+            if (document[hidden]) {
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+            } else {
+                if (!animationId) {
+                    animate();
+                }
+            }
+        }
+
+        if (typeof document.addEventListener !== "undefined" && hidden !== undefined) {
+            document.addEventListener(visibilityChange, handleVisibilityChange, false);
+        }
     </script>
 </body>
 </html>
-
-
-
