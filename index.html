@@ -635,13 +635,42 @@
             }
             
             updateLabel() {
-                this.createLabel();
-                // 移除旧标签，添加新标签
-                scene.remove(this.label);
-                this.label = new THREE.Sprite(this.label.material);
-                this.label.scale.set(2, 1, 1);
-                this.label.position.copy(this.position).add(new THREE.Vector3(0, 0.8, 0));
-                scene.add(this.label);
+                // 更新标签内容，但不重新创建标签对象
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = 128;
+                canvas.height = 64;
+                
+                // 绘制标签背景
+                context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // 绘制电荷符号
+                context.fillStyle = this.charge > 0 ? '#ff5252' : '#448aff';
+                context.font = 'bold 24px Arial';
+                context.textAlign = 'center';
+                context.fillText(this.charge > 0 ? '+' : '−', canvas.width/2 - 15, canvas.height/2 + 8);
+                
+                // 绘制电荷值
+                context.fillStyle = '#ffffff';
+                context.font = 'bold 20px Arial';
+                context.fillText(Math.abs(this.charge).toFixed(1), canvas.width/2 + 15, canvas.height/2 + 8);
+                
+                // 绘制电荷名称
+                context.fillStyle = '#ffffff';
+                context.font = 'bold 16px Arial';
+                context.fillText(this.name, canvas.width/2, 20);
+                
+                // 更新现有标签的纹理
+                const texture = new THREE.CanvasTexture(canvas);
+                if (this.label && this.label.material) {
+                    // 释放旧纹理内存
+                    if (this.label.material.map) {
+                        this.label.material.map.dispose();
+                    }
+                    this.label.material.map = texture;
+                    this.label.material.needsUpdate = true;
+                }
             }
             
             updateColor() {
@@ -649,12 +678,15 @@
                 this.mesh.material.color = new THREE.Color(color);
                 this.mesh.material.emissive = new THREE.Color(color).multiplyScalar(0.3);
                 this.glow.material.color = new THREE.Color(color);
+                this.updateLabel(); // 更新标签颜色和符号
             }
             
             updatePosition() {
                 this.mesh.position.copy(this.position);
                 this.glow.position.copy(this.position);
-                this.label.position.copy(this.position).add(new THREE.Vector3(0, 0.8, 0));
+                if (this.label) {
+                    this.label.position.copy(this.position).add(new THREE.Vector3(0, 0.8, 0));
+                }
             }
             
             clearFieldVisualization() {
@@ -1038,7 +1070,6 @@
                 this.charges.forEach(charge => {
                     charge.updateColor();
                     charge.updatePosition();
-                    charge.updateLabel();
                 });
                 
                 this.drawFieldLines();
@@ -1175,7 +1206,8 @@
                 else if (axis === 'z') charge.position.z = value;
                 
                 document.getElementById(`${id}Value`).textContent = value.toFixed(1);
-                chargeManager.updateAllCharges();
+                charge.updatePosition(); // 直接更新电荷位置和标签位置
+                chargeManager.drawFieldLines(); // 重新绘制电场线
             });
         });
         
