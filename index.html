@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>三维点电荷电场线可视化模拟器</title>
+    <title>三维点电荷电场线可视化模拟器（带二维剖面视图）</title>
     <style>
         body {
             margin: 0;
@@ -294,19 +294,100 @@
             font-weight: bold;
         }
         
+        /* 二维剖面视图容器 */
+        #sectionViewContainer {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 90;
+            background: rgba(25, 25, 35, 0.95);
+            backdrop-filter: blur(10px);
+            color: #fff;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            width: 320px;
+            height: 320px;
+        }
+        
+        #sectionViewContainer h4 {
+            margin: 0 0 10px 0;
+            color: #4fc3f7;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        #sectionView {
+            width: 100%;
+            height: calc(100% - 40px);
+            background: rgba(10, 10, 20, 0.7);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .section-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+        
+        .section-btn {
+            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 1;
+            text-align: center;
+            min-width: 60px;
+        }
+        
+        .section-btn:hover, .section-btn.active {
+            background: rgba(79, 195, 247, 0.2);
+            border-color: #4fc3f7;
+        }
+        
         /* 响应式调整 */
+        @media (max-width: 1200px) {
+            #status {
+                left: 350px;
+                top: 350px;
+            }
+            
+            #sectionViewContainer {
+                top: 350px;
+                right: 15px;
+            }
+        }
+        
         @media (max-width: 900px) {
-            #controls, #legend, #info, #field-strength, #status {
+            #controls, #legend, #info, #field-strength, #status, #sectionViewContainer {
                 position: relative;
                 max-width: 100%;
                 width: calc(100% - 30px);
                 margin: 10px auto;
                 left: 0;
                 right: 0;
+                top: auto;
+                bottom: auto;
             }
             #container {
                 padding-top: 10px;
+                height: auto;
+                overflow-y: auto;
             }
+        }
+        
+        /* 隐藏二维视图的默认状态 */
+        #sectionViewContainer {
+            display: block; /* 默认显示 */
         }
     </style>
     <!-- 添加Font Awesome图标 -->
@@ -408,9 +489,18 @@
                         <option value="both">两者都显示</option>
                     </select>
                 </div>
+                <div class="slider-container">
+                    <label>二维剖面平面:</label>
+                    <select id="sectionPlane">
+                        <option value="xy">XY平面</option>
+                        <option value="xz">XZ平面</option>
+                        <option value="yz">YZ平面</option>
+                    </select>
+                </div>
                 <button id="resetView">重置视角</button>
                 <button id="exportConfig">导出配置</button>
                 <button id="addCharge">添加第三个电荷</button>
+                <button id="toggleSectionView">隐藏二维视图</button>
             </div>
         </div>
         
@@ -432,6 +522,26 @@
             <div class="status-item">
                 <span class="status-label">电荷密度比:</span>
                 <span id="densityRatio" class="status-value">1:1</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">二维剖面:</span>
+                <span id="sectionPlaneValue" class="status-value">XY平面</span>
+            </div>
+        </div>
+        
+        <!-- 二维剖面视图 -->
+        <div id="sectionViewContainer">
+            <h4>
+                <span><i class="fas fa-chart-area"></i> 二维剖面视图</span>
+                <span style="font-size: 10px; color: #b0bec5;">物理书风格</span>
+            </h4>
+            <canvas id="sectionView"></canvas>
+            <div class="section-controls">
+                <button class="section-btn active" data-plane="xy">XY平面</button>
+                <button class="section-btn" data-plane="xz">XZ平面</button>
+                <button class="section-btn" data-plane="yz">YZ平面</button>
+                <button class="section-btn" id="showFieldVectors">场强矢量</button>
+                <button class="section-btn" id="toggleGrid">网格</button>
             </div>
         </div>
         
@@ -476,6 +586,7 @@
             <div>• 双击: 重置视角</div>
             <div>• 空格键: 暂停/继续动画</div>
             <div>• 鼠标移动: 查看当前位置电场强度</div>
+            <div>• 二维视图: 显示电场线剖面</div>
         </div>
     </div>
 
@@ -545,6 +656,472 @@
         const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
         gridHelper.position.y = -5;
         scene.add(gridHelper);
+        
+        // 二维剖面视图类
+        class SectionView {
+            constructor(canvasId) {
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                this.plane = 'xy'; // 默认XY平面
+                this.showVectors = false;
+                this.showGrid = true;
+                this.charges = [];
+                this.fieldLines = [];
+                this.scale = 25; // 像素/单位（增加缩放比例，使视图更紧凑）
+                this.offsetX = this.canvas.width / 2;
+                this.offsetY = this.canvas.height / 2;
+                this.gridSize = 1.0; // 网格大小（单位）
+                
+                // 设置canvas尺寸
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+            }
+            
+            resize() {
+                const container = this.canvas.parentElement;
+                this.canvas.width = container.clientWidth;
+                this.canvas.height = container.clientHeight - 40;
+                this.offsetX = this.canvas.width / 2;
+                this.offsetY = this.canvas.height / 2;
+                this.draw();
+            }
+            
+            setPlane(plane) {
+                this.plane = plane;
+                this.draw();
+            }
+            
+            setCharges(charges) {
+                this.charges = charges;
+                this.draw();
+            }
+            
+            setFieldLines(fieldLines) {
+                this.fieldLines = fieldLines;
+                this.draw();
+            }
+            
+            toggleVectors() {
+                this.showVectors = !this.showVectors;
+                this.draw();
+                return this.showVectors;
+            }
+            
+            toggleGrid() {
+                this.showGrid = !this.showGrid;
+                this.draw();
+                return this.showGrid;
+            }
+            
+            // 将三维坐标转换为二维坐标（根据当前剖面平面）
+            projectTo2D(point3D) {
+                let x, y;
+                
+                switch(this.plane) {
+                    case 'xy':
+                        x = point3D.x;
+                        y = point3D.y;
+                        break;
+                    case 'xz':
+                        x = point3D.x;
+                        y = point3D.z;
+                        break;
+                    case 'yz':
+                        x = point3D.y;
+                        y = point3D.z;
+                        break;
+                }
+                
+                // 转换为canvas坐标
+                const canvasX = this.offsetX + x * this.scale;
+                const canvasY = this.offsetY - y * this.scale; // Y轴反转
+                
+                return { x: canvasX, y: canvasY };
+            }
+            
+            // 绘制网格
+            drawGrid() {
+                if (!this.showGrid) return;
+                
+                this.ctx.strokeStyle = 'rgba(100, 100, 120, 0.3)';
+                this.ctx.lineWidth = 1;
+                
+                // 计算可见范围
+                const minX = -Math.floor(this.offsetX / this.scale);
+                const maxX = Math.floor((this.canvas.width - this.offsetX) / this.scale);
+                const minY = -Math.floor(this.offsetY / this.scale);
+                const maxY = Math.floor((this.canvas.height - this.offsetY) / this.scale);
+                
+                // 绘制垂直线
+                for (let x = minX; x <= maxX; x += this.gridSize) {
+                    const canvasX = this.offsetX + x * this.scale;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(canvasX, 0);
+                    this.ctx.lineTo(canvasX, this.canvas.height);
+                    this.ctx.stroke();
+                    
+                    // 绘制坐标标签
+                    if (Math.abs(x) > 0.1 && x !== 0) {
+                        this.ctx.fillStyle = 'rgba(180, 180, 200, 0.7)';
+                        this.ctx.font = '9px Arial';
+                        this.ctx.textAlign = 'center';
+                        this.ctx.fillText(x.toFixed(1), canvasX, this.canvas.height - 5);
+                    }
+                }
+                
+                // 绘制水平线
+                for (let y = minY; y <= maxY; y += this.gridSize) {
+                    const canvasY = this.offsetY - y * this.scale;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, canvasY);
+                    this.ctx.lineTo(this.canvas.width, canvasY);
+                    this.ctx.stroke();
+                    
+                    // 绘制坐标标签
+                    if (Math.abs(y) > 0.1 && y !== 0) {
+                        this.ctx.fillStyle = 'rgba(180, 180, 200, 0.7)';
+                        this.ctx.font = '9px Arial';
+                        this.ctx.textAlign = 'left';
+                        this.ctx.fillText(y.toFixed(1), 5, canvasY - 5);
+                    }
+                }
+                
+                // 绘制坐标轴
+                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                this.ctx.lineWidth = 2;
+                
+                // X轴
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, this.offsetY);
+                this.ctx.lineTo(this.canvas.width, this.offsetY);
+                this.ctx.stroke();
+                
+                // Y轴
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.offsetX, 0);
+                this.ctx.lineTo(this.offsetX, this.canvas.height);
+                this.ctx.stroke();
+                
+                // 坐标轴标签
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                this.ctx.font = '11px Arial';
+                this.ctx.textAlign = 'right';
+                this.ctx.fillText(this.getAxisLabel('x'), this.canvas.width - 10, this.offsetY - 10);
+                this.ctx.textAlign = 'left';
+                this.ctx.fillText(this.getAxisLabel('y'), this.offsetX + 10, 15);
+                
+                // 绘制原点标签
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                this.ctx.font = '10px Arial';
+                this.ctx.textAlign = 'right';
+                this.ctx.fillText('0', this.offsetX - 5, this.offsetY + 15);
+            }
+            
+            getAxisLabel(axis) {
+                switch(this.plane) {
+                    case 'xy':
+                        return axis === 'x' ? 'X轴' : 'Y轴';
+                    case 'xz':
+                        return axis === 'x' ? 'X轴' : 'Z轴';
+                    case 'yz':
+                        return axis === 'x' ? 'Y轴' : 'Z轴';
+                }
+            }
+            
+            // 绘制电荷 - 修改：点电荷大小固定
+            drawCharges() {
+                this.charges.forEach(charge => {
+                    const pos2D = this.projectTo2D(charge.position);
+                    const radius = 8; // 固定半径，点电荷没有体积
+                    
+                    // 绘制电荷圆
+                    this.ctx.beginPath();
+                    this.ctx.arc(pos2D.x, pos2D.y, radius, 0, Math.PI * 2);
+                    this.ctx.fillStyle = charge.charge > 0 ? '#ff5252' : '#448aff';
+                    this.ctx.fill();
+                    
+                    // 绘制电荷边框
+                    this.ctx.strokeStyle = charge.charge > 0 ? '#ff8a80' : '#82b1ff';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.stroke();
+                    
+                    // 绘制电荷符号和数值 - 字体大小固定
+                    this.ctx.fillStyle = 'white';
+                    this.ctx.font = 'bold 12px Arial'; // 固定字体大小
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    
+                    const sign = charge.charge > 0 ? '+' : '−';
+                    const value = Math.abs(charge.charge).toFixed(1);
+                    this.ctx.fillText(`${sign}${value}`, pos2D.x, pos2D.y);
+                    
+                    // 绘制电荷标签
+                    this.ctx.font = 'bold 11px Arial';
+                    this.ctx.fillText(`电荷${charge.name}`, pos2D.x, pos2D.y - radius - 12);
+                });
+            }
+            
+            // 绘制电场线
+            drawFieldLines() {
+                this.fieldLines.forEach(line => {
+                    const { points, color } = line;
+                    
+                    if (points.length < 2) return;
+                    
+                    this.ctx.strokeStyle = color;
+                    this.ctx.lineWidth = 1.5; // 稍细的线
+                    this.ctx.beginPath();
+                    
+                    // 绘制电场线
+                    for (let i = 0; i < points.length; i++) {
+                        const point2D = this.projectTo2D(points[i]);
+                        
+                        if (i === 0) {
+                            this.ctx.moveTo(point2D.x, point2D.y);
+                        } else {
+                            this.ctx.lineTo(point2D.x, point2D.y);
+                        }
+                    }
+                    
+                    this.ctx.stroke();
+                    
+                    // 绘制箭头（每隔一段距离）
+                    const arrowSpacing = 25; // 像素距离
+                    let accumulatedDist = 0;
+                    
+                    for (let i = 1; i < points.length; i++) {
+                        const prev2D = this.projectTo2D(points[i-1]);
+                        const curr2D = this.projectTo2D(points[i]);
+                        
+                        const dx = curr2D.x - prev2D.x;
+                        const dy = curr2D.y - prev2D.y;
+                        const segmentDist = Math.sqrt(dx*dx + dy*dy);
+                        
+                        if (accumulatedDist + segmentDist >= arrowSpacing) {
+                            // 计算箭头位置
+                            const ratio = (arrowSpacing - accumulatedDist) / segmentDist;
+                            const arrowX = prev2D.x + dx * ratio;
+                            const arrowY = prev2D.y + dy * ratio;
+                            
+                            // 绘制箭头
+                            this.drawArrow(arrowX, arrowY, dx, dy, color);
+                            
+                            accumulatedDist = 0; // 重置距离
+                        } else {
+                            accumulatedDist += segmentDist;
+                        }
+                    }
+                });
+            }
+            
+            // 绘制箭头
+            drawArrow(x, y, dx, dy, color) {
+                const length = Math.sqrt(dx*dx + dy*dy);
+                if (length === 0) return;
+                
+                const unitX = dx / length;
+                const unitY = dy / length;
+                
+                const arrowLength = 12; // 较小的箭头
+                const arrowWidth = 6;
+                
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(Math.atan2(dy, dx));
+                
+                this.ctx.fillStyle = color;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(-arrowLength, arrowWidth/2);
+                this.ctx.lineTo(-arrowLength, -arrowWidth/2);
+                this.ctx.closePath();
+                this.ctx.fill();
+                
+                this.ctx.restore();
+            }
+            
+            // 绘制电场矢量场
+            drawVectorField(chargeManager) {
+                if (!this.showVectors) return;
+                
+                const gridStep = 1.0; // 单位
+                const vectorScale = 0.4; // 矢量缩放因子（更小的矢量）
+                
+                // 计算可见范围
+                const minX = -Math.floor(this.offsetX / this.scale);
+                const maxX = Math.floor((this.canvas.width - this.offsetX) / this.scale);
+                const minY = -Math.floor(this.offsetY / this.scale);
+                const maxY = Math.floor((this.canvas.height - this.offsetY) / this.scale);
+                
+                for (let x = minX; x <= maxX; x += gridStep) {
+                    for (let y = minY; y <= maxY; y += gridStep) {
+                        // 创建三维点（根据当前平面）
+                        let point3D;
+                        switch(this.plane) {
+                            case 'xy':
+                                point3D = new THREE.Vector3(x, y, 0);
+                                break;
+                            case 'xz':
+                                point3D = new THREE.Vector3(x, 0, y);
+                                break;
+                            case 'yz':
+                                point3D = new THREE.Vector3(0, x, y);
+                                break;
+                        }
+                        
+                        // 检查是否太接近电荷
+                        let tooClose = false;
+                        for (const charge of this.charges) {
+                            const dx = point3D.x - charge.position.x;
+                            const dy = point3D.y - charge.position.y;
+                            const dz = point3D.z - charge.position.z;
+                            const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                            
+                            if (distance < 0.8) {
+                                tooClose = true;
+                                break;
+                            }
+                        }
+                        
+                        if (tooClose) continue;
+                        
+                        // 计算电场
+                        const field = chargeManager.calculateTotalField(point3D);
+                        const fieldStrength = field.length();
+                        
+                        if (fieldStrength < 0.01) continue;
+                        
+                        // 将电场矢量投影到当前平面
+                        let field2D;
+                        switch(this.plane) {
+                            case 'xy':
+                                field2D = { x: field.x, y: field.y };
+                                break;
+                            case 'xz':
+                                field2D = { x: field.x, y: field.z };
+                                break;
+                            case 'yz':
+                                field2D = { x: field.y, y: field.z };
+                                break;
+                        }
+                        
+                        // 绘制矢量
+                        const pos2D = this.projectTo2D(point3D);
+                        const vecLength = Math.min(25, fieldStrength * vectorScale * this.scale); // 限制最大长度
+                        
+                        this.drawVector(pos2D.x, pos2D.y, field2D.x, field2D.y, vecLength);
+                    }
+                }
+            }
+            
+            // 绘制矢量
+            drawVector(x, y, dx, dy, length) {
+                const angle = Math.atan2(dy, dx);
+                const arrowLength = Math.min(length, 25);
+                
+                this.ctx.save();
+                this.ctx.translate(x, y);
+                this.ctx.rotate(angle);
+                
+                // 根据场强设置颜色（从蓝到红）
+                const strength = Math.sqrt(dx*dx + dy*dy);
+                const maxStrength = 5.0;
+                const normalized = Math.min(strength / maxStrength, 1.0);
+                const r = Math.floor(normalized * 255);
+                const g = 0;
+                const b = Math.floor((1 - normalized) * 255);
+                const color = `rgb(${r}, ${g}, ${b})`;
+                
+                // 绘制矢量线
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = 1.5;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, 0);
+                this.ctx.lineTo(arrowLength, 0);
+                this.ctx.stroke();
+                
+                // 绘制箭头
+                this.ctx.fillStyle = color;
+                this.ctx.beginPath();
+                this.ctx.moveTo(arrowLength, 0);
+                this.ctx.lineTo(arrowLength - 6, 4);
+                this.ctx.lineTo(arrowLength - 6, -4);
+                this.ctx.closePath();
+                this.ctx.fill();
+                
+                this.ctx.restore();
+            }
+            
+            // 主要绘制函数
+            draw(chargeManager) {
+                // 清空画布
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // 绘制背景
+                this.ctx.fillStyle = 'rgba(10, 10, 20, 0.8)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // 绘制网格
+                this.drawGrid();
+                
+                // 绘制电场线
+                this.drawFieldLines();
+                
+                // 绘制电荷
+                this.drawCharges();
+                
+                // 绘制矢量场（如果启用）
+                if (chargeManager && this.showVectors) {
+                    this.drawVectorField(chargeManager);
+                }
+                
+                // 绘制标题
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                this.ctx.font = 'bold 12px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(`二维剖面视图 (${this.getPlaneName()})`, this.canvas.width / 2, 20);
+            }
+            
+            getPlaneName() {
+                switch(this.plane) {
+                    case 'xy': return 'XY平面';
+                    case 'xz': return 'XZ平面';
+                    case 'yz': return 'YZ平面';
+                    default: return '未知平面';
+                }
+            }
+            
+            // 从三维电场线提取二维数据
+            extractFieldLines(charges) {
+                const fieldLines2D = [];
+                
+                charges.forEach(charge => {
+                    charge.fieldLines.forEach(line => {
+                        const geometry = line.geometry;
+                        const points3D = geometry.attributes.position.array;
+                        const points = [];
+                        
+                        // 提取点并转换为二维
+                        for (let i = 0; i < points3D.length; i += 3) {
+                            const point3D = {
+                                x: points3D[i],
+                                y: points3D[i + 1],
+                                z: points3D[i + 2]
+                            };
+                            points.push(point3D);
+                        }
+                        
+                        // 确定颜色
+                        const isPositive = charge.charge > 0;
+                        const color = isPositive ? '#69f0ae' : '#ff5252';
+                        
+                        fieldLines2D.push({ points, color });
+                    });
+                });
+                
+                return fieldLines2D;
+            }
+        }
         
         // 点电荷类
         class PointCharge {
@@ -741,6 +1318,11 @@
                     displayMode: 'lines'
                 };
                 this.gridVectors = [];
+                this.sectionView = null;
+            }
+            
+            setSectionView(sectionView) {
+                this.sectionView = sectionView;
             }
             
             addCharge(name, position, charge) {
@@ -790,6 +1372,9 @@
                 if (this.fieldLineParams.displayMode === 'vectors' || this.fieldLineParams.displayMode === 'both') {
                     this.drawVectorField();
                 }
+                
+                // 更新二维剖面视图
+                this.updateSectionView();
                 
                 // 更新状态信息
                 this.updateStatus();
@@ -1024,6 +1609,16 @@
                 this.gridVectors = [];
             }
             
+            // 更新二维剖面视图
+            updateSectionView() {
+                if (this.sectionView) {
+                    const fieldLines2D = this.sectionView.extractFieldLines(this.charges);
+                    this.sectionView.setCharges(this.charges);
+                    this.sectionView.setFieldLines(fieldLines2D);
+                    this.sectionView.draw(this);
+                }
+            }
+            
             // 更新状态信息
             updateStatus() {
                 if (!this.lastLineCounts || !this.lastTotalLines) return;
@@ -1083,6 +1678,10 @@
         const chargeA = chargeManager.addCharge('A', new THREE.Vector3(-2, 0, 0), 1.0);
         const chargeB = chargeManager.addCharge('B', new THREE.Vector3(2, 0, 0), 1.0);
         
+        // 初始化二维剖面视图
+        const sectionView = new SectionView('sectionView');
+        chargeManager.setSectionView(sectionView);
+        
         // 更新UI显示
         function updateUI() {
             // 更新电荷A值
@@ -1123,6 +1722,10 @@
             document.getElementById('fieldLineLengthValue').textContent = chargeManager.fieldLineParams.maxLength.toFixed(1);
             
             document.getElementById('displayMode').value = chargeManager.fieldLineParams.displayMode;
+            
+            // 更新二维剖面平面
+            document.getElementById('sectionPlane').value = sectionView.plane;
+            document.getElementById('sectionPlaneValue').textContent = sectionView.getPlaneName();
         }
         
         // 导出配置
@@ -1137,7 +1740,12 @@
                         z: charge.position.z 
                     }
                 })),
-                visualization: chargeManager.fieldLineParams
+                visualization: chargeManager.fieldLineParams,
+                sectionView: {
+                    plane: sectionView.plane,
+                    showVectors: sectionView.showVectors,
+                    showGrid: sectionView.showGrid
+                }
             };
             
             const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
@@ -1235,6 +1843,52 @@
             chargeManager.drawFieldLines();
         });
         
+        // 二维剖面平面选择
+        document.getElementById('sectionPlane').addEventListener('change', function() {
+            sectionView.setPlane(this.value);
+            updateUI();
+        });
+        
+        // 二维剖面视图按钮
+        document.querySelectorAll('.section-btn[data-plane]').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const plane = this.getAttribute('data-plane');
+                sectionView.setPlane(plane);
+                document.getElementById('sectionPlane').value = plane;
+                updateUI();
+                
+                // 更新按钮状态
+                document.querySelectorAll('.section-btn[data-plane]').forEach(b => {
+                    b.classList.remove('active');
+                });
+                this.classList.add('active');
+            });
+        });
+        
+        // 显示/隐藏场强矢量
+        document.getElementById('showFieldVectors').addEventListener('click', function() {
+            const showVectors = sectionView.toggleVectors();
+            this.textContent = showVectors ? '隐藏矢量' : '场强矢量';
+            this.classList.toggle('active', showVectors);
+            sectionView.draw(chargeManager);
+        });
+        
+        // 显示/隐藏网格
+        document.getElementById('toggleGrid').addEventListener('click', function() {
+            const showGrid = sectionView.toggleGrid();
+            this.textContent = showGrid ? '网格' : '无网格';
+            this.classList.toggle('active', showGrid);
+        });
+        
+        // 显示/隐藏二维视图
+        let sectionViewVisible = true;
+        document.getElementById('toggleSectionView').addEventListener('click', function() {
+            const container = document.getElementById('sectionViewContainer');
+            sectionViewVisible = !sectionViewVisible;
+            container.style.display = sectionViewVisible ? 'block' : 'none';
+            this.textContent = sectionViewVisible ? '隐藏二维视图' : '显示二维视图';
+        });
+        
         // 按钮事件
         document.getElementById('resetView').addEventListener('click', function() {
             camera.position.set(0, 8, 15);
@@ -1307,6 +1961,7 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            sectionView.resize();
         });
         
         // 初始化
